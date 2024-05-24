@@ -24,6 +24,8 @@ const openai = new OpenAI({
 // Foursquare SDK initialization
 sdk.auth(FOURSQUARE_API_KEY);
 
+let userSearchTerms = {};
+
 // Middleware to parse JSON
 app.use(bodyParser.json());
 
@@ -43,7 +45,13 @@ async function handleMessage(message) {
     const chatId = message.chat.id;
 
     if (message.text === '/start') {
-        await sendMessage(chatId, 'Hello! Please share your location to get nearby amusment park suggestions. You can also send your location coordinates in the format "latitude,longitude".');
+        userSearchTerms[chatId] = null; // Reset search term for the new session
+        console.log(`Search term reset for chatId ${chatId}`);
+        await sendMessage(chatId, 'Hello! What do you want to search nearby? Please enter it in one word.');
+    } else if (!userSearchTerms[chatId] && message.text) {
+        userSearchTerms[chatId] = message.text.trim();
+        console.log(`Search term set for chatId ${chatId}: ${userSearchTerms[chatId]}`);
+        await sendMessage(chatId, 'Please share your location.');
     } else if (message.location) {
         await handleLocation(chatId, message.location.latitude, message.location.longitude);
     } else if (message.text && isValidCoordinates(message.text)) {
@@ -57,13 +65,17 @@ async function handleMessage(message) {
 // Function to handle location messages
 async function handleLocation(chatId, latitude, longitude) {
     console.log(`Received location: latitude=${latitude}, longitude=${longitude}`);
-    const amusementParks = await getNearbyAmusementParks(latitude, longitude);
-    if (amusementParks.length === 0) {
-        await sendMessage(chatId, "I couldn't find any nearby tourist spots. Please try again later.");
+    const searchTerm = userSearchTerms[chatId];
+    console.log(`Using search term for chatId ${chatId}: ${searchTerm}`);
+    const places = await getNearbyPlaces(latitude, longitude, searchTerm);
+    if (places.length === 0) {
+        await sendMessage(chatId, `I couldn't find any nearby ${searchTerm}. Please try again later.`);
         return;
     }
-    const suggestions = await getSuggestionsFromGPT3(amusementParks);
+    const suggestions = await getSuggestionsFromGPT3(places);
     await sendMessage(chatId, suggestions);
+    userSearchTerms[chatId] = null; // Reset the search term after use
+    console.log(`Search term reset after use for chatId ${chatId}`);
 }
 
 // Function to send a message
@@ -81,11 +93,10 @@ async function sendMessage(chatId, text) {
     });
 }
 
-// Function to get nearby amusementParks using Foursquare SDK
-async function getNearbyAmusementParks(latitude, longitude) {
-    console.log(`Fetching tourist spots for location: latitude=${latitude}, longitude=${longitude}`);
-    const radius = 100000; // Radius in meters
-    const query = 'amusement';
+// Function to get nearby places using Foursquare SDK
+async function getNearbyPlaces(latitude, longitude, query) {
+    console.log(`Fetching places for location: latitude=${latitude}, longitude=${longitude}, query=${query}`);
+    const radius = 5000; // Radius in meters
     
     try {
         const { data } = await sdk.placeSearch({
@@ -103,9 +114,9 @@ async function getNearbyAmusementParks(latitude, longitude) {
 }
 
 // Function to get suggestions from GPT-3.5
-async function getSuggestionsFromGPT3(amusementParks) {
-    const amusementNames = amusementParks.map(amusement => amusement.name).join(', ');
-    const prompt = `Here are some nearby amusementParks: ${amusementNames}. Please suggest the best ones to visit.`;
+async function getSuggestionsFromGPT3(places) {
+    const placeNames = places.map(place => place.name).join(', ');
+    const prompt = `Here are some nearby places: ${placeNames}. Please suggest the best ones to visit.`;
 
     console.log('Generating suggestions from GPT-3.5');
     const messages = [
@@ -140,7 +151,7 @@ app.listen(PORT, () => {
 async function setWebhook() {
     const webhookUrl = `${NGROK_URL}/webhook/${API_TOKEN}`;
     console.log('Setting webhook to URL:', webhookUrl);
-    const response = await fetch(`${TELEGRAM_API_URL}/setWebhook`, {
+    await fetch(`${TELEGRAM_API_URL}/setWebhook`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -149,7 +160,4 @@ async function setWebhook() {
             url: webhookUrl
         })
     });
-
-    const data = await response.json();
-    console.log('Set webhook response:', data);
 }
