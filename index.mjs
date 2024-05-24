@@ -9,7 +9,7 @@ import sdk from '@api/fsq-developers';
 config();
 
 const app = express();
-const PORT = process.env.PORT || 3003;
+const PORT = process.env.PORT || 3002;
 
 const API_TOKEN = process.env.TELEGRAM_API_TOKEN;
 const NGROK_URL = process.env.NGROK_URL;
@@ -47,7 +47,7 @@ async function handleMessage(message) {
     if (message.text === '/start') {
         userSearchTerms[chatId] = null; // Reset search term for the new session
         console.log(`Search term reset for chatId ${chatId}`);
-        await sendMessage(chatId, 'Hello! What do you want to search nearby? Please enter it in one word.');
+        await sendMessage(chatId, 'Hello! What do you want to search nearby? Please enter your query.');
     } else if (!userSearchTerms[chatId] && message.text) {
         userSearchTerms[chatId] = message.text.trim();
         console.log(`Search term set for chatId ${chatId}: ${userSearchTerms[chatId]}`);

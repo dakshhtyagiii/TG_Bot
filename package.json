@@ -17,5 +17,6 @@
     "express": "^4.19.2",
     "node-fetch": "^3.3.2",
     "openai": "^4.47.1"
-  }
+  },
+  "devDependencies": {}
 }
